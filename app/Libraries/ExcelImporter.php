@@ -183,27 +183,66 @@ class ExcelImporter
     {
         $groups = [];
 
-        $get = function (array $row, string $col, array $colMap, $default = '') {
-            if (!isset($colMap[$col])) return $default;
-            return $row[$colMap[$col]] ?? $default;
+        // Fitur $get robust: case-insensitive, mendukung array alias (Created Time / Create Time dll)
+        $get = function (array $row, $colCandidates, array $colMap, $default = '') {
+            $candidates = (array)$colCandidates;
+            foreach ($candidates as $col) {
+                $k = strtolower(trim($col));
+                // Exact match (case insensitive)
+                if (isset($colMap[$k])) {
+                    $val = $row[$colMap[$k]];
+                    if ($val !== null && $val !== '') return $val;
+                }
+                // Partial match fallback
+                foreach ($colMap as $actualCol => $idx) {
+                    if (strpos($actualCol, $k) !== false || strpos($k, $actualCol) !== false) {
+                        $val = $row[$idx];
+                        if ($val !== null && $val !== '') return $val;
+                    }
+                }
+            }
+            return $default;
+        };
+
+        // Helper untuk parse uang (Rp 15.000,00 -> 15000)
+        $parseCurrency = function($val) {
+            if (is_numeric($val)) return (float)$val;
+            $val = str_ireplace(['rp', 'idr', ' ', 'Rp.', 'Rp', "\xC2\xA0"], '', (string)$val); // bersihkan
+            if (strpos($val, ',') !== false && strpos($val, '.') !== false) {
+                if (strrpos($val, ',') > strrpos($val, '.')) {
+                    $val = str_replace('.', '', $val); $val = str_replace(',', '.', $val);
+                } else {
+                    $val = str_replace(',', '', $val);
+                }
+            } else if (strpos($val, ',') !== false) {
+                if (preg_match('/,\d{1,2}$/', $val)) $val = str_replace(',', '.', $val);
+                else $val = str_replace(',', '', $val);
+            } else if (strpos($val, '.') !== false) {
+                if (!preg_match('/\.\d{1,2}$/', $val)) $val = str_replace('.', '', $val);
+            }
+            return (float)$val;
         };
 
         for ($i = $headerIdx + 1; $i < count($rawRows); $i++) {
             $row     = $rawRows[$i];
-            $orderId = trim((string)$get($row, 'Order ID', $colMap));
+            $orderId = trim((string)$get($row, ['Order ID', 'Order_ID', 'ID Pesanan'], $colMap));
 
             if ($orderId === '') continue;
 
             $result['total_rows']++;
 
-            $statusPesanan = trim((string)$get($row, 'Order Status', $colMap));
-            $namaProduk    = trim((string)$get($row, 'Product Name', $colMap));
-            $variasi       = trim((string)$get($row, 'Variation', $colMap));
-            $qty           = (int)$get($row, 'Quantity', $colMap, 0);
-            $skuOrderAmt   = (float)$get($row, 'SKU Order Amount', $colMap, 0);
-            $skuSettleAmt  = (float)$get($row, 'SKU Settlement Amount', $colMap, 0);
-            $createTime    = $this->parseDate($get($row, 'Create Time', $colMap));
-            $paidTime      = $this->parseDate($get($row, 'Paid Time', $colMap));
+            $statusPesanan = trim((string)$get($row, ['Order Status', 'Status Pesanan'], $colMap));
+            $namaProduk    = trim((string)$get($row, ['Product Name', 'Nama Produk'], $colMap));
+            $variasi       = trim((string)$get($row, ['Variation', 'Variasi'], $colMap));
+            
+            $qtyRaw        = $get($row, ['Quantity', 'Kuantitas', 'Qty'], $colMap, 0);
+            $qty           = (int)preg_replace('/[^\d]/', '', (string)$qtyRaw);
+
+            $skuOrderAmt   = $parseCurrency($get($row, ['SKU Order Amount', 'Order Amount', 'Total Harga SKU'], $colMap, 0));
+            $skuSettleAmt  = $parseCurrency($get($row, ['SKU Settlement Amount', 'Settlement Amount', 'Penyelesaian', 'Total Diterima'], $colMap, 0));
+            
+            $createTime    = $this->parseDate($get($row, ['Created Time', 'Create Time', 'Waktu Dibuat', 'Order Creation'], $colMap));
+            $paidTime      = $this->parseDate($get($row, ['Paid Time', 'Payment Time', 'Waktu Pembayaran'], $colMap));
 
             if (!isset($groups[$orderId])) {
                 $groups[$orderId] = [

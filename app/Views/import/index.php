@@ -298,8 +298,8 @@
       </div>
     </a>
     <div class="header-pills">
-      <span class="pill"><i class="bi bi-database me-1"></i>sim_orders</span>
-      <span class="pill"><i class="bi bi-tiktok me-1"></i>TikTok OrderSKUList</span>
+      <a href="<?= base_url('/withdrawal') ?>" class="pill" style="color:#f59e0b; border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); font-weight:600;"><i class="bi bi-shield-lock-fill me-1"></i>Dashboard Penarikan (CEO)</a>
+      <span class="pill" style="pointer-events:none"><i class="bi bi-tiktok me-1"></i>TikTok OrderSKUList</span>
     </div>
   </header>
 
